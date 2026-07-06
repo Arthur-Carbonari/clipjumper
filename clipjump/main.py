@@ -1,10 +1,15 @@
 import threading
 import time
 
+from .formats import FORMATS
 from .history import ClipboardHistory
 from .inject import Injector
 from .keygrab import KeyGrabber
 from .tooltip import Tooltip
+
+# Once X is tapped at all, further X taps cycle these (never back to a plain
+# paste for that session) -- matches the original AHK tool's action-mode key.
+ACTIONS = ["Cancel", "Delete", "Clear History", "Terminate"]
 
 
 class ClipjumpDaemon:
@@ -15,6 +20,8 @@ class ClipjumpDaemon:
         self.grabber = KeyGrabber(self._on_key)
         self.navigating = False
         self.index = 0
+        self.format_index = 0
+        self.action_index = -1  # -1 = no action selected (normal paste)
 
     def start(self):
         self.history.start()
@@ -37,19 +44,37 @@ class ClipjumpDaemon:
             if self.navigating:
                 self.index = max(self.index - 1, 0)
                 self._update_tooltip()
+        elif name == "z":
+            if self.navigating:
+                self.format_index = (self.format_index + 1) % len(FORMATS)
+                self._update_tooltip()
+        elif name == "x":
+            if self.navigating:
+                self.action_index = (self.action_index + 1) % len(ACTIONS)
+                self._update_tooltip()
 
     def _start_navigation(self):
         if len(self.history) == 0:
             return
         self.navigating = True
         self.index = 0
-        self.grabber.enable_c()
+        self.format_index = 0
+        self.action_index = -1
+        self.grabber.enable_nav()
         self._update_tooltip()
 
     def _update_tooltip(self):
         text = self.history.get(self.index)
-        if text is not None:
-            self.tooltip.show(text, self.index, len(self.history))
+        if text is None:
+            return
+        status_parts = []
+        if self.action_index >= 0:
+            status_parts.append(f"Action: {ACTIONS[self.action_index]}")
+        fmt_name, _ = FORMATS[self.format_index]
+        if fmt_name != "None":
+            status_parts.append(f"Format: {fmt_name}")
+        status = "  ".join(status_parts) if status_parts else None
+        self.tooltip.show(text, self.index, len(self.history), status=status)
 
     def _watch_ctrl_release(self):
         while True:
@@ -59,19 +84,42 @@ class ClipjumpDaemon:
 
     def _commit(self):
         text = self.history.get(self.index)
+        index = self.index
+        action = ACTIONS[self.action_index] if self.action_index >= 0 else None
+        fmt_name, fmt_fn = FORMATS[self.format_index]
+
         self.navigating = False
-        self.grabber.disable_c()
+        self.grabber.disable_nav()
         self.tooltip.hide()
+
+        if action == "Cancel":
+            return
+        if action == "Delete":
+            self.history.delete(index)
+            return
+        if action == "Clear History":
+            self.history.clear()
+            return
+        if action == "Terminate":
+            self.tooltip.quit()
+            return
+
         if text is not None:
+            pasted = fmt_fn(text)
             # Our own synthetic paste keystroke would otherwise be caught by
             # our own permanent Ctrl+V grab, re-triggering navigation in a loop.
             self.grabber.disable_v()
             try:
-                self.injector.commit_paste(text)
+                self.injector.commit_paste(pasted, restore_text=text)
             finally:
                 self.grabber.enable_v()
 
 
 if __name__ == "__main__":
-    print("clipjump running: Ctrl+C copies normally; hold Ctrl+V to navigate clipboard history (V=older, C=newer), release Ctrl to paste.", flush=True)
+    print(
+        "clipjump running: Ctrl+C copies normally; hold Ctrl+V to navigate clipboard "
+        "history (V=older, C=newer), Z cycles paste format, X cycles action mode "
+        "(Cancel/Delete/Clear History/Terminate), release Ctrl to commit.",
+        flush=True,
+    )
     ClipjumpDaemon().start()
