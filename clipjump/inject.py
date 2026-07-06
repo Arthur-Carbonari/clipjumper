@@ -47,6 +47,18 @@ class Injector:
         time.sleep(0.03)
         self.send_paste()
 
+    def set_clipboard_files(self, uri_list_text):
+        subprocess.run(
+            ["xclip", "-selection", "clipboard", "-t", "text/uri-list"],
+            input=uri_list_text.encode(),
+            check=True,
+        )
+
+    def commit_paste_files(self, uri_list_text):
+        self.set_clipboard_files(uri_list_text)
+        time.sleep(0.03)
+        self.send_paste()
+
 
 if __name__ == "__main__":
     import threading
