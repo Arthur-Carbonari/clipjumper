@@ -57,6 +57,7 @@ class Tooltip:
         root.withdraw()
         root.overrideredirect(True)
         root.attributes("-topmost", True)
+        root.configure(bg="#1e1e1e")
 
         label = tk.Label(
             root,
@@ -70,7 +71,7 @@ class Tooltip:
             pady=6,
             wraplength=420,
         )
-        label.pack()
+        label.pack(fill="x")
 
         counter = tk.Label(
             root,
@@ -82,7 +83,7 @@ class Tooltip:
             font=("monospace", 8),
             padx=8,
         )
-        counter.pack(anchor="w")
+        counter.pack(fill="x")
 
         status_label = tk.Label(
             root,
@@ -94,7 +95,23 @@ class Tooltip:
             font=("monospace", 8, "bold"),
             padx=8,
         )
-        status_label.pack(anchor="w")
+        status_label.pack(fill="x")
+
+        separator = tk.Frame(root, bg="#3a3a3a", height=1)
+        separator.pack(fill="x", pady=(4, 0))
+
+        hint_label = tk.Label(
+            root,
+            text="V/C: navigate   Z: format   X: action",
+            justify="left",
+            anchor="w",
+            bg="#1e1e1e",
+            fg="#6a6a6a",
+            font=("monospace", 8),
+            padx=8,
+            pady=4,
+        )
+        hint_label.pack(fill="x")
 
         self._ready.set()
 
@@ -108,7 +125,7 @@ class Tooltip:
                         counter.config(text=f"clip {index + 1} / {total}")
                         if status:
                             status_label.config(text=status)
-                            status_label.pack(anchor="w")
+                            status_label.pack(fill="x")
                         else:
                             status_label.pack_forget()
                         x, y = self._cursor_pos()
