@@ -1,5 +1,6 @@
 import threading
 import time
+from urllib.parse import unquote, urlparse
 
 from .formats import FORMATS
 from .history import ClipboardHistory
@@ -10,6 +11,16 @@ from .tooltip import Tooltip
 # Once X is tapped at all, further X taps cycle these (never back to a plain
 # paste for that session) -- matches the original AHK tool's action-mode key.
 ACTIONS = ["Cancel", "Delete", "Clear History", "Terminate"]
+
+
+def _friendly_file_list(uri_list_text):
+    paths = []
+    for line in uri_list_text.strip().split("\n"):
+        line = line.strip("\r\n")
+        if not line or line.startswith("#"):
+            continue
+        paths.append(unquote(urlparse(line).path) or line)
+    return "\n".join(paths) if paths else uri_list_text
 
 
 class ClipjumpDaemon:
@@ -78,6 +89,8 @@ class ClipjumpDaemon:
         total = len(self.history)
         if clip.kind == "image":
             self.tooltip.show_image(clip.data, clip.mime, self.index, total, status=status)
+        elif clip.kind == "files":
+            self.tooltip.show_text(_friendly_file_list(clip.data), self.index, total, status=status)
         else:
             self.tooltip.show_text(clip.data, self.index, total, status=status)
 
@@ -117,6 +130,8 @@ class ClipjumpDaemon:
         try:
             if clip.kind == "image":
                 self.injector.commit_paste_image(clip.data, clip.mime)
+            elif clip.kind == "files":
+                self.injector.commit_paste_files(clip.data)
             else:
                 pasted = fmt_fn(clip.data)
                 self.injector.commit_paste(pasted, restore_text=clip.data)
