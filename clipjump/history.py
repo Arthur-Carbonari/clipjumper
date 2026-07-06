@@ -79,6 +79,26 @@ class ClipboardHistory:
 
     def _read_clipboard(self):
         targets = self._list_targets()
+
+        # Check file references first: file managers (Dolphin) advertise
+        # text/uri-list for a copied file/dir, but also typically offer a
+        # text/plain fallback containing the same literal URI string --
+        # without checking this first, that fallback wins and the file
+        # copy gets silently flattened into plain URI text.
+        if "text/uri-list" in targets:
+            try:
+                result = subprocess.run(
+                    ["xclip", "-selection", "clipboard", "-t", "text/uri-list", "-o"],
+                    capture_output=True,
+                    timeout=1,
+                )
+                text = result.stdout.decode("utf-8", errors="replace")
+                if not text:
+                    return None
+                return Clip("files", text, "text/uri-list")
+            except Exception:
+                return None
+
         has_text = any(t in _TEXT_TARGETS for t in targets)
         image_mime = next((t for t in targets if t.startswith("image/")), None)
 
