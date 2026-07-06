@@ -89,6 +89,15 @@ class ClipboardHistory:
                 return self._items[index]
             return None
 
+    def delete(self, index):
+        with self._lock:
+            if 0 <= index < len(self._items):
+                del self._items[index]
+
+    def clear(self):
+        with self._lock:
+            self._items.clear()
+
     def __len__(self):
         with self._lock:
             return len(self._items)
