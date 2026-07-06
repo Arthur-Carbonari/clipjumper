@@ -28,10 +28,16 @@ class Injector:
     def send_copy(self):
         self._tap_combo(self.kc_c)
 
-    def commit_paste(self, text):
+    def commit_paste(self, text, restore_text=None):
         self.set_clipboard(text)
         time.sleep(0.03)
         self.send_paste()
+        if restore_text is not None and restore_text != text:
+            # Give the target app time to finish its SelectionRequest for
+            # `text` before we swap the clipboard back, so a Z-formatted
+            # paste doesn't leave the formatted variant as the new MRU item.
+            time.sleep(0.05)
+            self.set_clipboard(restore_text)
 
 
 if __name__ == "__main__":
