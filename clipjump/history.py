@@ -3,6 +3,9 @@ import threading
 import time
 from collections import deque, namedtuple
 
+from Xlib import display
+from Xlib.ext import xfixes
+
 try:
     from jeepney import DBusAddress, new_method_call
     from jeepney.io.blocking import open_dbus_connection
@@ -18,9 +21,8 @@ _TEXT_TARGETS = {"UTF8_STRING", "STRING", "TEXT", "text/plain", "text/plain;char
 
 
 class ClipboardHistory:
-    def __init__(self, maxlen=50, poll_interval=0.3):
+    def __init__(self, maxlen=50):
         self._items = deque(maxlen=maxlen)
-        self._poll_interval = poll_interval
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
@@ -30,7 +32,7 @@ class ClipboardHistory:
             current = self._read_clipboard()
             if current:
                 self._items.appendleft(current)
-        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._thread = threading.Thread(target=self._listen_loop, daemon=True)
         self._thread.start()
 
     def _seed_from_klipper(self):
@@ -106,20 +108,40 @@ class ClipboardHistory:
         except Exception:
             return None
 
-    def _poll_loop(self):
+    def _listen_loop(self):
+        """Event-driven instead of polling: XFixes pushes a notification
+        only when the CLIPBOARD selection's owner actually changes, so we
+        only ever fetch clipboard content in response to a real change --
+        no fixed-interval re-fetching (which would be wasteful for large
+        clips like images) and no polling delay.
+
+        Blocks directly on next_event() rather than select()-ing on the
+        raw socket fd -- python-xlib does its own internal socket
+        buffering, which can desync from the OS-level fd readability that
+        select() observes (confirmed empirically: select() missed events
+        that a direct blocking next_event() picks up immediately)."""
+        d = display.Display()
+        d.xfixes_query_version()
+        root = d.screen().root
+        clipboard_atom = d.intern_atom("CLIPBOARD")
+        d.xfixes_select_selection_input(root, clipboard_atom, xfixes.XFixesSetSelectionOwnerNotifyMask)
+
         while not self._stop.is_set():
-            time.sleep(self._poll_interval)
-            current = self._read_clipboard()
-            if not current:
-                continue
-            with self._lock:
-                if self._items and self._items[0] == current:
-                    continue
-                try:
-                    self._items.remove(current)
-                except ValueError:
-                    pass
-                self._items.appendleft(current)
+            d.next_event()
+            self._check_clipboard()
+
+    def _check_clipboard(self):
+        current = self._read_clipboard()
+        if not current:
+            return
+        with self._lock:
+            if self._items and self._items[0] == current:
+                return
+            try:
+                self._items.remove(current)
+            except ValueError:
+                pass
+            self._items.appendleft(current)
 
     def get(self, index):
         with self._lock:
