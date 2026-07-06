@@ -64,17 +64,22 @@ class ClipjumpDaemon:
         self._update_tooltip()
 
     def _update_tooltip(self):
-        text = self.history.get(self.index)
-        if text is None:
+        clip = self.history.get(self.index)
+        if clip is None:
             return
         status_parts = []
         if self.action_index >= 0:
             status_parts.append(f"Action: {ACTIONS[self.action_index]}")
-        fmt_name, _ = FORMATS[self.format_index]
-        if fmt_name != "None":
-            status_parts.append(f"Format: {fmt_name}")
+        if clip.kind == "text":
+            fmt_name, _ = FORMATS[self.format_index]
+            if fmt_name != "None":
+                status_parts.append(f"Format: {fmt_name}")
         status = "  ".join(status_parts) if status_parts else None
-        self.tooltip.show(text, self.index, len(self.history), status=status)
+        total = len(self.history)
+        if clip.kind == "image":
+            self.tooltip.show_image(clip.data, clip.mime, self.index, total, status=status)
+        else:
+            self.tooltip.show_text(clip.data, self.index, total, status=status)
 
     def _watch_ctrl_release(self):
         while True:
@@ -83,10 +88,10 @@ class ClipjumpDaemon:
                 self._commit()
 
     def _commit(self):
-        text = self.history.get(self.index)
+        clip = self.history.get(self.index)
         index = self.index
         action = ACTIONS[self.action_index] if self.action_index >= 0 else None
-        fmt_name, fmt_fn = FORMATS[self.format_index]
+        _, fmt_fn = FORMATS[self.format_index]
 
         self.navigating = False
         self.grabber.disable_nav()
@@ -104,15 +109,19 @@ class ClipjumpDaemon:
             self.tooltip.quit()
             return
 
-        if text is not None:
-            pasted = fmt_fn(text)
-            # Our own synthetic paste keystroke would otherwise be caught by
-            # our own permanent Ctrl+V grab, re-triggering navigation in a loop.
-            self.grabber.disable_v()
-            try:
-                self.injector.commit_paste(pasted, restore_text=text)
-            finally:
-                self.grabber.enable_v()
+        if clip is None:
+            return
+        # Our own synthetic paste keystroke would otherwise be caught by our
+        # own permanent Ctrl+V grab, re-triggering navigation in a loop.
+        self.grabber.disable_v()
+        try:
+            if clip.kind == "image":
+                self.injector.commit_paste_image(clip.data, clip.mime)
+            else:
+                pasted = fmt_fn(clip.data)
+                self.injector.commit_paste(pasted, restore_text=clip.data)
+        finally:
+            self.grabber.enable_v()
 
 
 if __name__ == "__main__":
