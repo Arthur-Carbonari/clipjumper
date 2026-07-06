@@ -39,8 +39,8 @@ class Tooltip:
         self._thread.start()
         self._ready.wait()
 
-    def show(self, text, index, total):
-        self._queue.put(("show", text, index, total))
+    def show(self, text, index, total, status=None):
+        self._queue.put(("show", text, index, total, status))
 
     def hide(self):
         self._queue.put(("hide",))
@@ -84,6 +84,18 @@ class Tooltip:
         )
         counter.pack(anchor="w")
 
+        status_label = tk.Label(
+            root,
+            text="",
+            justify="left",
+            anchor="w",
+            bg="#1e1e1e",
+            fg="#e0a030",
+            font=("monospace", 8, "bold"),
+            padx=8,
+        )
+        status_label.pack(anchor="w")
+
         self._ready.set()
 
         def poll():
@@ -91,9 +103,14 @@ class Tooltip:
                 while True:
                     msg = self._queue.get_nowait()
                     if msg[0] == "show":
-                        _, text, index, total = msg
+                        _, text, index, total, status = msg
                         label.config(text=_preview(text))
                         counter.config(text=f"clip {index + 1} / {total}")
+                        if status:
+                            status_label.config(text=status)
+                            status_label.pack(anchor="w")
+                        else:
+                            status_label.pack_forget()
                         x, y = self._cursor_pos()
                         root.deiconify()
                         root.geometry(f"+{x + 16}+{y + 16}")
