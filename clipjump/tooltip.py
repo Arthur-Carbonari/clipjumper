@@ -1,10 +1,13 @@
+import io
 import queue
 import threading
 import tkinter as tk
 
+from PIL import Image, ImageTk
 from Xlib import display as xdisplay
 
 MAX_PREVIEW_CHARS = 300
+MAX_THUMBNAIL_SIZE = (320, 240)
 
 
 def _preview(text):
@@ -39,8 +42,11 @@ class Tooltip:
         self._thread.start()
         self._ready.wait()
 
-    def show(self, text, index, total, status=None):
-        self._queue.put(("show", text, index, total, status))
+    def show_text(self, text, index, total, status=None):
+        self._queue.put(("show_text", text, index, total, status))
+
+    def show_image(self, data, mime, index, total, status=None):
+        self._queue.put(("show_image", data, mime, index, total, status))
 
     def hide(self):
         self._queue.put(("hide",))
@@ -72,6 +78,8 @@ class Tooltip:
             wraplength=420,
         )
         label.pack(fill="x")
+
+        image_label = tk.Label(root, bg="#1e1e1e")
 
         counter = tk.Label(
             root,
@@ -115,25 +123,50 @@ class Tooltip:
 
         self._ready.set()
 
+        def reposition_and_show():
+            x, y = self._cursor_pos()
+            root.deiconify()
+            root.geometry(f"+{x + 16}+{y + 16}")
+            root.lift()
+            root.update_idletasks()
+            root.update()
+
+        def show_status(status):
+            if status:
+                status_label.config(text=status)
+                status_label.pack(fill="x", before=separator)
+            else:
+                status_label.pack_forget()
+
         def poll():
             try:
                 while True:
                     msg = self._queue.get_nowait()
-                    if msg[0] == "show":
+                    if msg[0] == "show_text":
                         _, text, index, total, status = msg
+                        image_label.pack_forget()
                         label.config(text=_preview(text))
+                        label.pack(fill="x", before=counter)
                         counter.config(text=f"clip {index + 1} / {total}")
-                        if status:
-                            status_label.config(text=status)
-                            status_label.pack(fill="x")
-                        else:
-                            status_label.pack_forget()
-                        x, y = self._cursor_pos()
-                        root.deiconify()
-                        root.geometry(f"+{x + 16}+{y + 16}")
-                        root.lift()
-                        root.update_idletasks()
-                        root.update()
+                        show_status(status)
+                        reposition_and_show()
+                    elif msg[0] == "show_image":
+                        _, data, mime, index, total, status = msg
+                        try:
+                            pil_img = Image.open(io.BytesIO(data))
+                            pil_img.thumbnail(MAX_THUMBNAIL_SIZE)
+                            photo = ImageTk.PhotoImage(pil_img)
+                            image_label.config(image=photo)
+                            image_label.image = photo  # keep a reference
+                            label.pack_forget()
+                            image_label.pack(before=counter)
+                        except Exception:
+                            image_label.pack_forget()
+                            label.config(text=f"[Image: {mime}, could not preview]")
+                            label.pack(fill="x", before=counter)
+                        counter.config(text=f"clip {index + 1} / {total}")
+                        show_status(status)
+                        reposition_and_show()
                     elif msg[0] == "hide":
                         root.withdraw()
                     elif msg[0] == "quit":
@@ -154,7 +187,7 @@ if __name__ == "__main__":
     tt.start()
     samples = ["first clip content here", "second clip\nwith a newline", "third clip " * 20]
     for i, s in enumerate(samples):
-        tt.show(s, i, len(samples))
+        tt.show_text(s, i, len(samples))
         time.sleep(1.5)
     tt.hide()
     time.sleep(1)
