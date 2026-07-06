@@ -1,13 +1,20 @@
 import subprocess
 import threading
 import time
-from collections import deque
+from collections import deque, namedtuple
 
 try:
     from jeepney import DBusAddress, new_method_call
     from jeepney.io.blocking import open_dbus_connection
 except ImportError:
     DBusAddress = None
+
+# kind is "text" or "image". For text, data is a str and mime is None.
+# For image, data is raw bytes and mime is the target used to fetch it
+# (e.g. "image/png").
+Clip = namedtuple("Clip", ["kind", "data", "mime"])
+
+_TEXT_TARGETS = {"UTF8_STRING", "STRING", "TEXT", "text/plain", "text/plain;charset=utf-8"}
 
 
 class ClipboardHistory:
@@ -49,7 +56,7 @@ class ClipboardHistory:
         with self._lock:
             self._items.clear()
             for item in items[: self._items.maxlen]:  # already newest-first
-                self._items.append(item)
+                self._items.append(Clip("text", item, None))
         return True
 
     def stop(self):
@@ -57,14 +64,45 @@ class ClipboardHistory:
         if self._thread:
             self._thread.join(timeout=2)
 
+    def _list_targets(self):
+        try:
+            result = subprocess.run(
+                ["xclip", "-selection", "clipboard", "-t", "TARGETS", "-o"],
+                capture_output=True,
+                timeout=1,
+            )
+            return result.stdout.decode("utf-8", errors="replace").split("\n")
+        except Exception:
+            return []
+
     def _read_clipboard(self):
+        targets = self._list_targets()
+        has_text = any(t in _TEXT_TARGETS for t in targets)
+        image_mime = next((t for t in targets if t.startswith("image/")), None)
+
+        if image_mime and not has_text:
+            try:
+                result = subprocess.run(
+                    ["xclip", "-selection", "clipboard", "-t", image_mime, "-o"],
+                    capture_output=True,
+                    timeout=1,
+                )
+                if not result.stdout:
+                    return None
+                return Clip("image", result.stdout, image_mime)
+            except Exception:
+                return None
+
         try:
             result = subprocess.run(
                 ["xclip", "-selection", "clipboard", "-o"],
                 capture_output=True,
                 timeout=1,
             )
-            return result.stdout.decode("utf-8", errors="replace")
+            text = result.stdout.decode("utf-8", errors="replace")
+            if not text:
+                return None
+            return Clip("text", text, None)
         except Exception:
             return None
 
