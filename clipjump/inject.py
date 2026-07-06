@@ -15,6 +15,9 @@ class Injector:
     def set_clipboard(self, text):
         subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
 
+    def set_clipboard_image(self, data, mime):
+        subprocess.run(["xclip", "-selection", "clipboard", "-t", mime], input=data, check=True)
+
     def _tap_combo(self, keycode):
         xtest.fake_input(self.display, X.KeyPress, self.kc_ctrl_l)
         xtest.fake_input(self.display, X.KeyPress, keycode)
@@ -38,6 +41,11 @@ class Injector:
             # paste doesn't leave the formatted variant as the new MRU item.
             time.sleep(0.05)
             self.set_clipboard(restore_text)
+
+    def commit_paste_image(self, data, mime):
+        self.set_clipboard_image(data, mime)
+        time.sleep(0.03)
+        self.send_paste()
 
 
 if __name__ == "__main__":
