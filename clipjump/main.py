@@ -38,11 +38,11 @@ class ClipjumpDaemon:
             if not self.navigating:
                 self._start_navigation()
             else:
-                self.index = min(self.index + 1, len(self.history) - 1)
+                self.index = (self.index + 1) % len(self.history)
                 self._update_tooltip()
         elif name == "c":
             if self.navigating:
-                self.index = max(self.index - 1, 0)
+                self.index = (self.index - 1) % len(self.history)
                 self._update_tooltip()
         elif name == "z":
             if self.navigating:
