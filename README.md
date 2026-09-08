@@ -45,12 +45,14 @@ Hyprland keybindings noted for Wayland.
     to the running daemon over a local Unix socket.
   - Clipboard read/write/watch uses `wl-clipboard` (`wl-copy`/`wl-paste`)
     instead of `xclip`.
-  - Synthetic paste uses `wtype` sending **Ctrl+Shift+V**, not Ctrl+V —
-    reusing Ctrl+V would re-trigger ClipJumper's own Hyprland bind instead
-    of reaching the focused app. (Shift+Insert was tried first and silently
-    pasted nothing: `foot` — and some other terminals — bind Shift+Insert to
-    the **PRIMARY** selection, but `wl-copy` writes the **CLIPBOARD**
-    selection.) See "Known limitations" below.
+  - Synthetic paste is dispatched through Hyprland itself
+    (`hl.dsp.send_shortcut`), and the combo depends on the focused window:
+    **Ctrl+Shift+V** into a terminal, **Ctrl+V** into anything else.
+    Terminals use Ctrl+V as the "quote next character" control code and put
+    paste on Ctrl+Shift+V; GUI apps are the reverse, treating Ctrl+Shift+V
+    as "paste special"/"paste as plain text", which silently drops an image
+    or file clip. `clipjump/backends/wayland/inject.py` decides from the
+    focused window's class.
   - The tooltip (Tk, via XWayland) positions itself using `hyprctl -j
     cursorpos` instead of an X11 pointer query, and needs a `no_focus`
     window rule — Hyprland reports the override-redirect Tk window as
@@ -71,8 +73,8 @@ Hyprland keybindings noted for Wayland.
     Fedora, `tk` on Arch/Omarchy — `tkinter` needs the system Tcl/Tk
     shared libs, which pip can't provide).
   - X11 only: `xclip`.
-  - Wayland/Hyprland only: `wl-clipboard` and `wtype` (both ship by
-    default on Omarchy).
+  - Wayland/Hyprland only: `wl-clipboard` (ships by default on Omarchy).
+    Paste injection goes through `hyprctl`, so no `wtype` is needed.
 - Autostart setup uses a **systemd user service** (`systemd --user`); on
   Omarchy this is activated via UWSM the same way it is on a typical
   systemd-based X11 desktop.
@@ -100,11 +102,11 @@ sudo dnf install xclip python3-tkinter
 System dependencies (Omarchy/Arch, Hyprland):
 
 ```bash
-sudo pacman -S tk wl-clipboard wtype
+sudo pacman -S tk wl-clipboard
 ```
 
-(`wl-clipboard` and `wtype` are already installed by default on Omarchy —
-this is just for a plain Arch/Hyprland setup that doesn't have them yet.)
+(`wl-clipboard` is already installed by default on Omarchy — this is just
+for a plain Arch/Hyprland setup that doesn't have it yet.)
 
 ### Hyprland keybindings (Wayland only)
 
@@ -259,14 +261,10 @@ again manually with `systemctl --user start clipjump`.
 
 - Wayland compositors other than Hyprland aren't supported — the global
   hotkey mechanism depends on Hyprland's Lua config/bind API.
-- On the Wayland/Hyprland backend, synthetic paste uses Ctrl+Shift+V
-  instead of Ctrl+V (see "Compatibility" above). An app that only listens
-  for Ctrl+V and doesn't support the Ctrl+Shift+V paste convention won't
-  receive the pasted clip.
-- The synthetic paste ends with its own Ctrl release, which re-fires the
-  commit bind and sends one extra `commit` to the daemon after every paste.
-  It's a no-op — by then `navigating` is already false — but it does mean
-  the daemon sees slightly more `commit` messages than you pressed.
+- Picking the paste combo depends on recognising terminals by window class
+  (`TERMINAL_CLASSES` in `clipjump/backends/wayland/inject.py`). A terminal
+  that isn't in that list — and whose class doesn't contain "term" — gets
+  Ctrl+V and so won't paste; add its class to the set.
 - Terminal emulators and some other apps may behave inconsistently with
   synthetic paste injection depending on how they implement clipboard
   handling.
@@ -281,7 +279,7 @@ again manually with `systemctl --user start clipjump`.
 - `clipjump/backends/x11/` — `python-xlib`/XTest/XFixes/`xclip`
   implementation (key grabbing, paste injection, clipboard read/watch,
   cursor position)
-- `clipjump/backends/wayland/` — Hyprland/`wl-clipboard`/`wtype`
+- `clipjump/backends/wayland/` — Hyprland/`wl-clipboard`
   implementation of the same pieces, plus the Unix-socket listener that
   Hyprland's keybinds talk to
 - `clipjump/ctl.py` — one-shot sender Hyprland's keybinds shell out to
