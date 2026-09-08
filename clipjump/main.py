@@ -108,7 +108,18 @@ class ClipjumpDaemon:
         while True:
             time.sleep(0.02)
             if self.navigating and not self.grabber.ctrl_is_down():
-                self._commit()
+                try:
+                    self._commit()
+                except Exception:
+                    # An exception here must not kill this thread -- it's
+                    # the only thing that ever calls _commit(), so a dead
+                    # thread means every future gesture silently stops
+                    # committing (tooltip stuck open, nothing pastes).
+                    import traceback
+
+                    traceback.print_exc()
+                    self.navigating = False
+                    self.tooltip.hide()
 
     def _commit(self):
         clip = self.history.get(self.index)
