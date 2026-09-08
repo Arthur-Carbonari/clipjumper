@@ -10,7 +10,6 @@ class Injector:
         self.display = display.Display()
         self.kc_ctrl_l = self.display.keysym_to_keycode(XK.string_to_keysym("Control_L"))
         self.kc_v = self.display.keysym_to_keycode(XK.string_to_keysym("v"))
-        self.kc_c = self.display.keysym_to_keycode(XK.string_to_keysym("c"))
 
     def set_clipboard(self, text):
         subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
@@ -18,18 +17,19 @@ class Injector:
     def set_clipboard_image(self, data, mime):
         subprocess.run(["xclip", "-selection", "clipboard", "-t", mime], input=data, check=True)
 
-    def _tap_combo(self, keycode):
-        xtest.fake_input(self.display, X.KeyPress, self.kc_ctrl_l)
-        xtest.fake_input(self.display, X.KeyPress, keycode)
-        xtest.fake_input(self.display, X.KeyRelease, keycode)
-        xtest.fake_input(self.display, X.KeyRelease, self.kc_ctrl_l)
-        self.display.sync()
+    def set_clipboard_files(self, uri_list_text):
+        subprocess.run(
+            ["xclip", "-selection", "clipboard", "-t", "text/uri-list"],
+            input=uri_list_text.encode(),
+            check=True,
+        )
 
     def send_paste(self):
-        self._tap_combo(self.kc_v)
-
-    def send_copy(self):
-        self._tap_combo(self.kc_c)
+        xtest.fake_input(self.display, X.KeyPress, self.kc_ctrl_l)
+        xtest.fake_input(self.display, X.KeyPress, self.kc_v)
+        xtest.fake_input(self.display, X.KeyRelease, self.kc_v)
+        xtest.fake_input(self.display, X.KeyRelease, self.kc_ctrl_l)
+        self.display.sync()
 
     def commit_paste(self, text, restore_text=None):
         self.set_clipboard(text)
@@ -46,13 +46,6 @@ class Injector:
         self.set_clipboard_image(data, mime)
         time.sleep(0.03)
         self.send_paste()
-
-    def set_clipboard_files(self, uri_list_text):
-        subprocess.run(
-            ["xclip", "-selection", "clipboard", "-t", "text/uri-list"],
-            input=uri_list_text.encode(),
-            check=True,
-        )
 
     def commit_paste_files(self, uri_list_text):
         self.set_clipboard_files(uri_list_text)

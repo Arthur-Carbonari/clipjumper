@@ -77,12 +77,6 @@ class KeyGrabber:
         pointer = self.root.query_pointer()
         return bool(pointer.mask & X.ControlMask)
 
-    def pending_event_count(self):
-        return self.display.pending_events()
-
-    def next_event(self):
-        return self.display.next_event()
-
     def run(self):
         try:
             while True:
