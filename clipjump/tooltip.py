@@ -54,7 +54,13 @@ class Tooltip:
         self._queue.put(("quit",))
 
     def run(self):
-        root = tk.Tk()
+        # className sets WM_CLASS, which is what the compositor matches
+        # window rules against. The Hyprland config needs a `no_focus` rule
+        # for this window (it's override-redirect but Hyprland still reports
+        # it as accepting input, and it would steal focus from whatever
+        # you're pasting into) -- giving it its own class keeps that rule
+        # from applying to every other Tk app on the system.
+        root = tk.Tk(className="clipjump")
         root.withdraw()
         root.overrideredirect(True)
         root.attributes("-topmost", True)

@@ -55,7 +55,8 @@ Hyprland keybindings noted for Wayland.
     cursorpos` instead of an X11 pointer query, and needs a `no_focus`
     window rule — Hyprland reports the override-redirect Tk window as
     `acceptsInput: true` and will otherwise hand it the keyboard focus,
-    stealing it from whatever you're pasting into.
+    stealing it from whatever you're pasting into. It sets its own WM_CLASS
+    (`Clipjump`) so that rule doesn't catch every Tk app on the system.
 
   Other Wayland compositors aren't supported — the Hyprland config below
   and the `hyprctl` cursor query are Hyprland-specific.
@@ -116,8 +117,10 @@ local clipjump_dir = "/path/to/clipjump"
 local venv_py = clipjump_dir .. "/.venv/bin/python3"
 
 -- Never let the tooltip (a Tk/XWayland override-redirect window) steal
--- keyboard focus from whatever you're actually pasting into.
-o.window({ class = "^Tk$" }, { no_focus = true })
+-- keyboard focus from whatever you're actually pasting into. Matches
+-- ^Clipjump$, not ^Tk$: the tooltip sets its own WM_CLASS, so this rule
+-- doesn't make every other Tk app on the system unfocusable too.
+o.window({ class = "^Clipjump$" }, { no_focus = true })
 
 local function notify(key)
   -- `python3 -m clipjump.ctl` resolves the clipjump package via the current
