@@ -4,7 +4,6 @@ import threading
 import tkinter as tk
 
 from PIL import Image, ImageTk
-from Xlib import display as xdisplay
 
 MAX_PREVIEW_CHARS = 300
 MAX_THUMBNAIL_SIZE = (320, 240)
@@ -31,11 +30,11 @@ class Tooltip:
     it exists only for the __main__ test below.
     """
 
-    def __init__(self):
+    def __init__(self, cursor_pos_fn):
         self._queue = queue.Queue()
         self._ready = threading.Event()
         self._thread = None
-        self._x_display = xdisplay.Display()
+        self._cursor_pos_fn = cursor_pos_fn
 
     def start(self):
         self._thread = threading.Thread(target=self.run, daemon=True)
@@ -53,10 +52,6 @@ class Tooltip:
 
     def quit(self):
         self._queue.put(("quit",))
-
-    def _cursor_pos(self):
-        pointer = self._x_display.screen().root.query_pointer()
-        return pointer.root_x, pointer.root_y
 
     def run(self):
         root = tk.Tk()
@@ -124,7 +119,7 @@ class Tooltip:
         self._ready.set()
 
         def reposition_and_show():
-            x, y = self._cursor_pos()
+            x, y = self._cursor_pos_fn()
             root.deiconify()
             root.geometry(f"+{x + 16}+{y + 16}")
             root.lift()
@@ -183,7 +178,9 @@ class Tooltip:
 if __name__ == "__main__":
     import time
 
-    tt = Tooltip()
+    from .backends.x11.cursor import cursor_pos
+
+    tt = Tooltip(cursor_pos)
     tt.start()
     samples = ["first clip content here", "second clip\nwith a newline", "third clip " * 20]
     for i, s in enumerate(samples):

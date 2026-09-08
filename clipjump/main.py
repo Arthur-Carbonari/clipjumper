@@ -2,10 +2,12 @@ import threading
 import time
 from urllib.parse import unquote, urlparse
 
+from .backends.x11 import clipboard as clipboard_backend
+from .backends.x11 import cursor
+from .backends.x11.inject import Injector
+from .backends.x11.keygrab import KeyGrabber
 from .formats import FORMATS
 from .history import ClipboardHistory
-from .inject import Injector
-from .keygrab import KeyGrabber
 from .tooltip import Tooltip
 
 # Once X is tapped at all, further X taps cycle these (never back to a plain
@@ -25,8 +27,8 @@ def _friendly_file_list(uri_list_text):
 
 class ClipjumpDaemon:
     def __init__(self):
-        self.history = ClipboardHistory()
-        self.tooltip = Tooltip()
+        self.history = ClipboardHistory(clipboard_backend)
+        self.tooltip = Tooltip(cursor.cursor_pos)
         self.injector = Injector()
         self.grabber = KeyGrabber(self._on_key)
         self.navigating = False
