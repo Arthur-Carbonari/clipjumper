@@ -2,13 +2,21 @@ import threading
 import time
 from urllib.parse import unquote, urlparse
 
-from .backends.x11 import clipboard as clipboard_backend
-from .backends.x11 import cursor
-from .backends.x11.inject import Injector
-from .backends.x11.keygrab import KeyGrabber
+from . import backends
 from .formats import FORMATS
 from .history import ClipboardHistory
 from .tooltip import Tooltip
+
+if backends.detect() == "wayland":
+    from .backends.wayland import clipboard as clipboard_backend
+    from .backends.wayland import cursor
+    from .backends.wayland.inject import Injector
+    from .backends.wayland.keygrab import HyprlandKeyGrabber as KeyGrabber
+else:
+    from .backends.x11 import clipboard as clipboard_backend
+    from .backends.x11 import cursor
+    from .backends.x11.inject import Injector
+    from .backends.x11.keygrab import KeyGrabber
 
 # Once X is tapped at all, further X taps cycle these (never back to a plain
 # paste for that session) -- matches the original AHK tool's action-mode key.

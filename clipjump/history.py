@@ -98,7 +98,12 @@ class ClipboardHistory:
 if __name__ == "__main__":
     import time
 
-    from .backends.x11 import clipboard
+    from . import backends
+
+    if backends.detect() == "wayland":
+        from .backends.wayland import clipboard
+    else:
+        from .backends.x11 import clipboard
 
     h = ClipboardHistory(clipboard)
     h.start()

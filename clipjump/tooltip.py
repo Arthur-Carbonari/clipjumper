@@ -178,7 +178,12 @@ class Tooltip:
 if __name__ == "__main__":
     import time
 
-    from .backends.x11.cursor import cursor_pos
+    from . import backends
+
+    if backends.detect() == "wayland":
+        from .backends.wayland.cursor import cursor_pos
+    else:
+        from .backends.x11.cursor import cursor_pos
 
     tt = Tooltip(cursor_pos)
     tt.start()
