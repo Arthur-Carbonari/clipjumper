@@ -1,3 +1,4 @@
+import re
 import threading
 from collections import deque
 
@@ -8,6 +9,12 @@ except ImportError:
     DBusAddress = None
 
 from .clip import Clip
+
+# Klipper's getClipboardHistoryMenu doesn't return image bytes -- for a
+# clipboard image it gives back this placeholder label instead (e.g.
+# "▨ 919x303"). Seeding that in as a text clip would paste the literal
+# placeholder string, so these entries are dropped rather than kept.
+_KLIPPER_IMAGE_PLACEHOLDER = re.compile(r"^▨ \d+x\d+$")
 
 
 class ClipboardHistory:
@@ -46,6 +53,9 @@ class ClipboardHistory:
                 conn.close()
         except Exception:
             return False
+        if not items:
+            return False
+        items = [item for item in items if not _KLIPPER_IMAGE_PLACEHOLDER.match(item)]
         if not items:
             return False
         with self._lock:
