@@ -75,6 +75,9 @@ Hyprland keybindings noted for Wayland.
   - X11 only: `xclip`.
   - Wayland/Hyprland only: `wl-clipboard` (ships by default on Omarchy).
     Paste injection goes through `hyprctl`, so no `wtype` is needed.
+  - KDE tray icon only (optional, see below): `python3-gobject` and
+    `libappindicator-gtk3` — PyGObject needs its system Tcl/Tk-style shared
+    libs the same way `tkinter` does, so it can't come from pip either.
 - Autostart setup uses a **systemd user service** (`systemd --user`); on
   Omarchy this is activated via UWSM the same way it is on a typical
   systemd-based X11 desktop.
@@ -92,6 +95,13 @@ pip install -r requirements.txt
 `requirements.txt` is shared across both backends — `python-xlib` and
 `jeepney` are pure-Python and harmless to have installed even when unused
 (the X11 backend module simply never gets imported on Wayland).
+
+For the optional KDE tray icon (`clipjump/tray.py`, see below), the venv
+needs to see the system's PyGObject install (`gi`), which pip can't provide
+on its own — create the venv with `--system-site-packages`, or if it
+already exists, flip `include-system-site-packages = true` in
+`.venv/pyvenv.cfg`. `pystray` itself (in `requirements.txt`) installs
+normally via pip either way.
 
 System dependencies (Fedora, X11):
 
@@ -257,6 +267,60 @@ Note: using the **Terminate** action (X key) exits the process cleanly
 (exit code 0), so systemd won't auto-restart it in that case — start it
 again manually with `systemctl --user start clipjump`.
 
+### KDE tray icon (optional)
+
+`clipjump/tray.py` is a small, separate program: a KDE system-tray icon
+(via `pystray`'s AppIndicator backend, which Plasma's tray understands
+natively) whose right-click menu can Restart/Start/Stop the daemon by
+shelling out to `systemctl --user <action> clipjump.service`.
+
+It deliberately runs as its **own** process/service rather than a thread
+inside the daemon. If the daemon hangs (the historical failure mode here —
+it stays `active (running)` in systemd, never crashes, so nothing
+auto-restarts it), a thread sharing its process would very likely hang too:
+Python's GIL means the tray's click handler can't run unless whatever's
+stuck in the daemon releases the GIL, and this app makes blocking C-level
+calls (Xlib, D-Bus) that don't always do so. A separate OS process has no
+such dependency on the daemon's state, so the Restart button stays
+clickable no matter how badly the daemon is stuck.
+
+Create `~/.config/systemd/user/clipjump-tray.service`:
+
+```ini
+[Unit]
+Description=ClipJumper KDE tray icon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/path/to/clipjump/.venv/bin/python3 -m clipjump.tray
+WorkingDirectory=/path/to/clipjump
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
+```
+
+Then:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now clipjump-tray.service
+```
+
+Useful commands:
+
+```bash
+systemctl --user status clipjump-tray      # check it's running
+systemctl --user restart clipjump-tray     # restart the tray icon itself
+journalctl --user -u clipjump-tray -f      # tail logs
+```
+
+This is KDE/AppIndicator-specific (it registers with
+`org.kde.StatusNotifierWatcher`); it hasn't been adapted for other desktop
+environments or for Hyprland/Omarchy.
+
 ## Known limitations
 
 - Wayland compositors other than Hyprland aren't supported — the global
@@ -270,7 +334,10 @@ again manually with `systemctl --user start clipjump`.
   handling.
 - Clipboard-history seeding from existing history is Klipper-specific
   (KDE); other desktop environments start from just the current clipboard
-  value.
+  value. Klipper's history API only returns a text placeholder for images
+  (e.g. `▨ 919x303`), not the image bytes, so image clips from past
+  sessions aren't recovered on restart — only ones copied since the daemon
+  started.
 
 ## Project layout
 
@@ -292,3 +359,6 @@ again manually with `systemctl --user start clipjump`.
   cursor-position query to whichever backend is active
 - `clipjump/formats.py` — paste-format transforms (Z key)
 - `clipjump/main.py` — the daemon's state machine tying it all together
+- `clipjump/tray.py` — standalone KDE tray icon (Restart/Start/Stop via
+  `systemctl`), run as its own service separate from the daemon
+- `clipjump/assets/icon.png` — the tray icon image
