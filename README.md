@@ -321,6 +321,45 @@ This is KDE/AppIndicator-specific (it registers with
 `org.kde.StatusNotifierWatcher`); it hasn't been adapted for other desktop
 environments or for Hyprland/Omarchy.
 
+### Ghostty and Herdr on X11
+
+When Ghostty is focused, ClipJumper sends Ctrl+Shift+V for text clips and
+Ctrl+V for image clips. Ghostty handles the text paste, while Claude Code
+and Codex handle Ctrl+V by reading the image from the X11 clipboard.
+
+If text pastes but images do nothing, check `printenv DISPLAY XAUTHORITY`
+inside the Herdr pane. A persistent Herdr server started before graphical
+login can launch panes without the X11 environment. On systems where the
+desktop exports these variables to the systemd user manager, run
+`systemctl --user show-environment | grep -E '^(DISPLAY|XAUTHORITY)='`
+to verify the values are available there.
+
+For Bash, add the following to a startup file read by your Herdr panes
+(for example, `~/.bashrc`). It looks up the current X11 environment when
+launching either CLI from a pane without a display.
+
+```bash
+if [[ ${HERDR_ENV:-} == 1 ]]; then
+    _herdr_launch_with_x11_clipboard() (
+        if [[ -z ${DISPLAY:-} && -z ${WAYLAND_DISPLAY:-} ]]; then
+            while IFS= read -r entry; do
+                case "$entry" in
+                    DISPLAY=*|XAUTHORITY=*) export "$entry" ;;
+                esac
+            done < <(systemctl --user show-environment)
+        fi
+        exec "$@"
+    )
+
+    claude() { _herdr_launch_with_x11_clipboard claude "$@"; }
+    codex() { _herdr_launch_with_x11_clipboard codex "$@"; }
+fi
+```
+
+Open a new Bash pane or source the startup file in an existing pane.
+Relaunch the CLI to pick up the variables. Use `claude --continue` or
+`codex resume --last` to resume the most recent conversation.
+
 ## Known limitations
 
 - Wayland compositors other than Hyprland aren't supported — the global
